@@ -20,6 +20,11 @@ static SceUID g_config_blk;
 /** Buffer for the config data */
 static char *g_config = NULL;
 
+/** Buffer for the current config path */
+static char *g_config_path = NULL;
+static SceUID g_config_pid;
+static taihen_arg_buffer g_config_arg_buffer;
+
 /** Mutex for accessing g_config */
 static SceUID g_config_lock;
 
@@ -159,17 +164,38 @@ int plugin_free_config(void) {
 /**
  * @brief      Callback to config parser to load a plugin
  *
- * @param[in]  path   The path to load
+ * @param[in]  type   One of TAIHEN_CONFIG_HANDLER_TYPE
+ * @param[in]  data   The data (see type for more info)
  * @param[in]  param  Pointer to the PID to load plugin to.
  */
-static void plugin_load(const char *path, void *param) {
-  SceUID pid = *(SceUID *)param;
-  int ret;
-  int result;
+static void parser_callback(enum taihen_config_handler_type type, const char *data, void *param) {
+  switch(type) {
+    case TAIHEN_CONFIG_DATA_PATH:
+    case TAIHEN_CONFIG_DATA_END:
+      if (g_config_path != NULL) {
+        SceUID pid = *(SceUID *)param;
+        int ret;
+        int result;
+    
+        LOG("pid:%x loading module %s", g_config_pid, g_config_path);
+        ret = ksceKernelLoadStartModuleForPid(pid, path, 0, NULL, 0, NULL, &result);
+        LOG("load result: %x", ret);  
+      } else {
+        g_config_arg_buffer->data = (char *)ksceKernelAllocMemBlock("tai_config_arg_buffer", SCE_KERNEL_MEMBLOCK_TYPE_KERNEL_RW, sizeof(char*), NULL);
+      }
+      SceUID pid = *(SceUID *)param;
+      LOG("pid:%x buffering for module %s", pid, data)
+      g_config_path = data;
+      g_config_pid = pid;
+      break;
+    
+    case TAIHEN_CONFIG_DATA_ARG:
 
-  LOG("pid:%x loading module %s", pid, path);
-  ret = ksceKernelLoadStartModuleForPid(pid, path, 0, NULL, 0, NULL, &result);
-  LOG("load result: %x", ret);
+      break;
+
+    default:
+      return;
+  }
 }
 
 /**
@@ -188,7 +214,7 @@ int plugin_load_all(SceUID pid, const char *titleid) {
   g_delayed_load_kernel_plugins = 0;
   ksceKernelLockMutex(g_config_lock, 1, NULL);
   if (g_config) {
-    taihen_config_parse(g_config, titleid, plugin_load, &pid);
+    taihen_config_parse(g_config, titleid, parser_callback, &pid);
     ret = TAI_SUCCESS;
   } else {
     LOG("config not loaded");

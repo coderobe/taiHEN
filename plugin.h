@@ -28,6 +28,12 @@ int plugin_free_config(void);
 int plugin_load_all(SceUID pid, const char *titleid);
 int plugin_delayed_load_config(int load_kernel);
 
+typedef struct {
+  char *data;
+  size_t used;
+  size_t size;
+} taihen_arg_buffer;
+
 /** @} */
 
 #endif // TAI_PLUGIN_HEADER
